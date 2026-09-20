@@ -37,7 +37,7 @@ export class ScaledDotProductAttention {
 
     forward(query: number[][], key: number[][], value: number[][]) {
         const scores = matmul(query, this.transpose(key));
-        const scaledScores = this.scale(scores, Math.sqrt(this.keyDimension));
+        const scaledScores = this.scale(scores, 1 / Math.sqrt(this.keyDimension));
         const weights = scaledScores.map((row) => {
             return this.softmax(row);
         });
