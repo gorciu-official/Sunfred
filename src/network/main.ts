@@ -1,59 +1,86 @@
-import { MultiHeadAttention } from "./attention/multi-head.ts";
-import { addMatrices } from "./common.ts";
+import { TransformerBlock } from "./block.ts";
 import { EmbeddingLayer } from "./layers/embedding.ts";
-import { FeedForward } from "./layers/feed-forward.ts";
-import { LayerNorm } from "./layers/layer-norm.ts";
 import { PositionalEncoding } from "./layers/positional-encoding.ts";
 import { Tokenizer } from "./tokenizer.ts";
 
+type TransformerBlockConfig = {
+    numHeads: number;
+    hiddenDim: number;
+};
+
+type TransformerConfig = {
+    vocabSize: number;
+    embeddingDim: number;
+    blocks: TransformerBlockConfig[];
+};
+
 class Network {
-    private tokenizer: Tokenizer;
-    private embeddingLayer: EmbeddingLayer;
-    private attentionLayer: MultiHeadAttention;
-    private positionalEncoding: PositionalEncoding; 
-    private layerNorm: LayerNorm;
-    private feedForward: FeedForward;
+    private readonly tokenizer: Tokenizer;
+    private readonly embedding: EmbeddingLayer;
+    private readonly positionalEncoding: PositionalEncoding;
+    private readonly blocks: TransformerBlock[];
 
-    constructor(private vocab: string[], private embeddingDim: number, private hiddenDim: number) {
-        this.tokenizer = new Tokenizer(this.vocab);
-        this.embeddingLayer = new EmbeddingLayer(this.embeddingDim, this.vocab.length);
-        this.attentionLayer = new MultiHeadAttention(this.embeddingDim, this.embeddingDim);
-        this.positionalEncoding = new PositionalEncoding(this.embeddingDim);
-        this.layerNorm = new LayerNorm();
-        this.feedForward = new FeedForward(this.embeddingDim, this.hiddenDim);
-    };
+    constructor(
+        private readonly config: TransformerConfig,
+        vocab: string[]
+    ) {
+        this.tokenizer = new Tokenizer(vocab);
 
-    generateResponse(question: string) { 
-        const tokenized = this.tokenizer.tokenize(question);
-        console.log(`tokenized question: ${JSON.stringify(tokenized)}`);
+        this.embedding = new EmbeddingLayer(
+            config.embeddingDim,
+            config.vocabSize
+        );
 
-        const embeddings = this.embeddingLayer.forward(tokenized);
-        console.log(`embeddings: ${JSON.stringify(embeddings)}`);
+        this.positionalEncoding =
+            new PositionalEncoding(
+                this.config.embeddingDim
+            );
 
-        const positioned = this.positionalEncoding.forward(embeddings);
-        console.log(`positional encoding output: ${JSON.stringify(positioned)}`);
+        this.blocks = this.config.blocks.map(
+            blockConfig =>
+                new TransformerBlock(
+                    this.config.embeddingDim,
+                    blockConfig.hiddenDim,
+                    blockConfig.numHeads
+                )
+        );
+    }
 
-        const attentionOut = this.attentionLayer.forward(positioned);
-        console.log(`self attention output: ${JSON.stringify(attentionOut)}`);
+    generateResponse(question: string): string {
+        const tokens = this.tokenizer.tokenize(question);
 
-        const added = addMatrices(positioned, attentionOut);
-        console.log(`added: ${JSON.stringify(added)}`);
+        let output = this.embedding.forward(tokens);
+        output = this.positionalEncoding.forward(output);
 
-        const normalized = this.layerNorm.forward(added);
-        console.log(`normalized: ${JSON.stringify(normalized)}`);
+        for (const block of this.blocks) {
+            output = block.forward(output);
+        }
 
-        const feedForwardOut = this.feedForward.forward(normalized);
-        console.log(`feed forward: ${JSON.stringify(feedForwardOut)}`);
-
-        const secondAdded = addMatrices(normalized, feedForwardOut);
-        console.log(`second added: ${JSON.stringify(secondAdded)}`);
-
-        const output = this.layerNorm.forward(secondAdded);
-        console.log(`output: ${JSON.stringify(output)}`);
-
-        return question;
+        return JSON.stringify(output);
     }
 }
 
-const n = new Network([',', '!', 'hello', 'world'], 8, 32);
-console.log('model response: ' + n.generateResponse("hello, world!"));
+const config: TransformerConfig = {
+    vocabSize: 4,
+    embeddingDim: 8,
+
+    blocks: [
+        {
+            numHeads: 2,
+            hiddenDim: 32,
+        },
+        {
+            numHeads: 2,
+            hiddenDim: 64,
+        },
+        {
+            numHeads: 4,
+            hiddenDim: 128,
+        },
+    ],
+};
+
+const network = new Network(config, [",", "!", "hello", "world"]);
+
+const output = network.generateResponse("hello, world!");
+console.log(output);
