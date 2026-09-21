@@ -92,3 +92,15 @@ export function concatHeads(heads: number[][][]): number[][] {
             heads.flatMap(head => head[rowIndex])
     );
 }
+
+export function argmax(values: number[]): number {
+    let bestIndex = 0;
+
+    for (let i = 1; i < values.length; i++) {
+        if (values[i] > values[bestIndex]) {
+            bestIndex = i;
+        }
+    }
+
+    return bestIndex;
+}
